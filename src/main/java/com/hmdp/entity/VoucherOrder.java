@@ -21,8 +21,8 @@ import java.time.LocalDateTime;
 @Data
 @EqualsAndHashCode(callSuper = false)
 @Accessors(chain = true)
-@TableName("tb_voucher_order")
-public class VoucherOrder implements Serializable {
+@TableName("tb_voucher_order") //实体类绑定表名，不绑定也会自动匹配表名，但是不推荐这样做
+public class VoucherOrder  implements Serializable {
 
     private static final long serialVersionUID = 1L;
 
