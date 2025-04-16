@@ -36,6 +36,21 @@ public class BlogController {
     public Result saveBlog(@RequestBody Blog blog) {
         // 获取登录用户
         UserDTO user = UserHolder.getUser();
+        if(blog.getImages()==null || blog.getImages().isEmpty()){
+            return Result.fail("请上传图片");
+        }
+        if(blog.getTitle()==null || blog.getTitle().isEmpty()){
+            return Result.fail("请填写标题");
+        }
+        if(blog.getContent()==null || blog.getContent().isEmpty()){
+            return Result.fail("请填写内容");
+        }
+        if(blog.getContent().length()<5){
+            return Result.fail("内容不能少于5个字");
+        }
+        if(blog.getShopId()==null){
+            return Result.fail("请选择商铺");
+        }
         blog.setUserId(user.getId());
         // 保存探店博文
         blogService.save(blog);
