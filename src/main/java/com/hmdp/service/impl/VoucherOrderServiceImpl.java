@@ -29,6 +29,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 /**
  * <p>
@@ -149,6 +150,8 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
         SECKILL_SCRIPT.setResultType(Long.class);
     }
     private IVoucherOrderService proxy;
+    @Resource
+    private  IVoucherOrderService voucherService;
     @Override
     public Result seckillVoucher(Long voucherId) {
         Long orderId=redisIdWorker.nextId("order");
@@ -165,6 +168,7 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
         if (result != null) {
             r = result.intValue();
         }
+
         if(r !=0){
             return Result.fail(r==1?"库存不足":"不能重复下单");
         }
@@ -219,8 +223,12 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
         Long userId=voucherOrder.getUserId();
         long voucherId=voucherOrder.getVoucherId();
         int count=query().eq("voucher_id", voucherId).eq("user_id", userId).count();
+        long stock=seckillVoucherService.getById(voucherId).getStock();
         if(count>0){
             log.error("用户{}已经购买过该优惠券",userId);
+            //表示出现数据库缓存内容不一致，需要刷新缓存
+            stringRedisTemplate.delete("seckill:stock:"+voucherId);
+            stringRedisTemplate.opsForValue().set("seckill:stock:"+voucherId, String.valueOf(stock),30, TimeUnit.MINUTES);
             return;
         }
         boolean result=seckillVoucherService.update()

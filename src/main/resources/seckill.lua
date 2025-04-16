@@ -13,7 +13,11 @@ local stock_key="seckill:stock:"..voucher_id
 local order_key="seckill:order:"..voucher_id
 --2.判断库存是否充足
 local stock=redis.call("get",stock_key)
-if not stock or tonumber(stock)<=0 then
+if not stock then
+    --缓存不存在
+    return 1
+end
+if tonumber(stock)<=0 then
     --库存不足
     return 1
 end
