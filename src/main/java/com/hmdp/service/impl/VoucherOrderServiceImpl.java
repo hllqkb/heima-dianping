@@ -9,9 +9,10 @@ import com.hmdp.mapper.VoucherOrderMapper;
 import com.hmdp.service.ISeckillVoucherService;
 import com.hmdp.service.IVoucherOrderService;
 import com.hmdp.utils.RedisIdWorker;
-import com.hmdp.utils.SimpleRedisLock;
 import com.hmdp.utils.UserHolder;
 import lombok.extern.slf4j.Slf4j;
+import org.redisson.api.RLock;
+import org.redisson.api.RedissonClient;
 import org.springframework.aop.framework.AopContext;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -39,7 +40,8 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
     private ISeckillVoucherService seckillVoucherService;
     @Autowired
     private StringRedisTemplate stringRedisTemplate;
-
+    @Resource
+    private RedissonClient redissonClient;
     @Override
     public Result seckillVoucher(Long voucherId) {
         //查询优惠卷
@@ -68,8 +70,10 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
         //一人一单,不同用户加悲观锁
         Long userId=UserHolder.getUser().getId();
           //返回结果，实现每个线程的不同锁，锁定同一个用户的不同线程
-       SimpleRedisLock lock = new SimpleRedisLock("order:"+userId,stringRedisTemplate);
-        boolean lockResult=lock.tryLock(1200);
+//       SimpleRedisLock lock = new SimpleRedisLock("order:"+userId,stringRedisTemplate);
+        RLock lock = redissonClient.getLock("lock:order:"+userId);//Redisson实现分布式锁
+        boolean lockResult=lock.tryLock();
+
         if(!lockResult){
             //获取锁失败
             return Result.fail("请求次数过多，请稍后再试");
