@@ -3,7 +3,6 @@ package com.hmdp.service.impl;
 import cn.hutool.core.bean.BeanUtil;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.hmdp.dto.Result;
-import com.hmdp.dto.UserDTO;
 import com.hmdp.entity.VoucherOrder;
 import com.hmdp.mapper.VoucherOrderMapper;
 import com.hmdp.service.ISeckillVoucherService;
@@ -27,6 +26,7 @@ import javax.annotation.Resource;
 import java.time.Duration;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -67,19 +67,21 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
   /*            >: 从最新的消息开始读取，包括命令执行时流中已有的最新消息。
                     $: 从当前时间开始读取，只读取在命令执行之后产生的新消息。*/
                     List<MapRecord<String, Object, Object>> list = stringRedisTemplate.opsForStream().read(Consumer.from("g1", "c1"), StreamReadOptions
-                            .empty().count(1).block(Duration.ofSeconds(2)), StreamOffset.create("streams.order",
+                            .empty().count(1).block(Duration.ofSeconds(2)), StreamOffset.create("stream.orders",
                             ReadOffset.lastConsumed()));
 
                     //判断获取是否成功，没有消息继续循环
                     if(list==null||list.isEmpty()){
                         continue;
                     }
-                    VoucherOrder voucherOrder = BeanUtil.fillBeanWithMap(list.get(0).getValue(), new VoucherOrder(), true);
+                    MapRecord<String, Object, Object> record = list.get(0);
+                    Map<Object, Object> values=record.getValue();
+                    VoucherOrder voucherOrder = BeanUtil.fillBeanWithMap(values, new VoucherOrder(), true);
                     //如果有消息进行下单
                     handleVoucherOrder(voucherOrder);
                     //ACK确认消息已消费
-                    stringRedisTemplate.opsForStream().acknowledge("streams.order","g1",
-                            list.get(0).getId());
+                    stringRedisTemplate.opsForStream().acknowledge("stream.orders","g1",
+                            record.getId());
                 } catch (Exception e) {
                     log.error("订单队列取出异常", e);
                     handlePendingList();
@@ -93,22 +95,26 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
             try {
                 //不断从PendingList获取消息
                 List<MapRecord<String, Object, Object>> list = stringRedisTemplate.opsForStream().read(Consumer.from("g1", "c1"), StreamReadOptions
-                        .empty().count(1), StreamOffset.create("streams.order",
+                        .empty().count(1), StreamOffset.create("stream.orders",
                         ReadOffset.from("0")));
 
                 //判断获取是否成功，没有消息结束循环
                 if(list==null||list.isEmpty()){
                     break;}
-                VoucherOrder voucherOrder = BeanUtil.fillBeanWithMap(list.get(0).getValue(), new VoucherOrder(), true);
+
+                MapRecord<String, Object, Object> record = list.get(0);
+                Map<Object, Object> values=record.getValue();
+                VoucherOrder voucherOrder = BeanUtil.fillBeanWithMap(values, new VoucherOrder(), true);
                 //如果有消息进行下单
                 handleVoucherOrder(voucherOrder);
                 //ACK确认消息已消费
-                stringRedisTemplate.opsForStream().acknowledge("streams.order","g1",
-                        list.get(0).getId());
+                stringRedisTemplate.opsForStream().acknowledge("stream.orders","g1",
+                        record.getId());
+
             } catch (Exception e) {
                 log.error("PendingList队列取出异常", e);
                 try {
-                    Thread.sleep(1000);
+                    Thread.sleep(20);
                 } catch (InterruptedException ex) {
                     throw new RuntimeException(ex);
                 }
@@ -118,8 +124,8 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
 
     //处理订单
     private void handleVoucherOrder(VoucherOrder voucherOrder) {
-        UserDTO user = UserHolder.getUser();
-        long userId = user.getId();
+//        UserDTO user = UserHolder.getUser();
+        long userId = voucherOrder.getUserId();
         RLock lock = redissonClient.getLock("lock:order:"+userId);//Redisson实现分布式锁
         boolean lockResult=lock.tryLock();
 
@@ -148,6 +154,9 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
         Long orderId=redisIdWorker.nextId("order");
         proxy= (IVoucherOrderService) AopContext.currentProxy();
         Long userId=UserHolder.getUser().getId();
+        if(userId==null){
+            return Result.fail("请先登录");
+        }
         //执行Lua脚本
         Long result=stringRedisTemplate.execute(SECKILL_SCRIPT, Collections.emptyList(), voucherId.toString(),userId.toString(),
                orderId.toString() );
@@ -208,14 +217,15 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
     @Transactional // 开启事务，出现问题实现回滚
     public void createVoucherOrder(VoucherOrder voucherOrder){
         Long userId=voucherOrder.getUserId();
-        int count=query().eq("voucher_id", voucherOrder).eq("user_id", userId).count();
+        long voucherId=voucherOrder.getVoucherId();
+        int count=query().eq("voucher_id", voucherId).eq("user_id", userId).count();
         if(count>0){
             log.error("用户{}已经购买过该优惠券",userId);
             return;
         }
         boolean result=seckillVoucherService.update()
                 .setSql("stock=stock-1")
-                .eq("voucher_id", voucherOrder)
+                .eq("voucher_id", voucherId)
                 .gt("stock",0)
                 .update();
         //乐观锁，在更新数据的时候进行使用
@@ -228,6 +238,6 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
         }
         //保存订单
         save(voucherOrder);
-        log.info("创建订单成功，订单号：{}", voucherOrder.getVoucherId());
+        log.info("创建订单成功，订单号：{}", voucherOrder.getId());
     }
 }

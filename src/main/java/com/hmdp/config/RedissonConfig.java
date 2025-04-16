@@ -9,18 +9,25 @@ import org.springframework.context.annotation.Primary;
 
 @Configuration
 public class RedissonConfig {
+
     @Bean
-    @Primary //标记为默认的RedissonClient
+    @Primary
     public RedissonClient redisson() {
         Config config = new Config();
-        config.useSingleServer().setAddress("redis://localhost:6379")
-                .setPassword("123456");
+        config.useSingleServer()
+                .setAddress("redis://localhost:6379")
+                .setPassword("123456")
+                // 连接池配置
+                .setConnectionPoolSize(64)    // 最大连接数
+                .setConnectionMinimumIdleSize(10) // 最小空闲连接数
+                // 超时设置
+                .setConnectTimeout(10000)     // 连接超时时间(毫秒)
+                .setTimeout(3000)             // 操作超时时间
+                .setRetryAttempts(3)          // 命令重试次数
+                .setRetryInterval(1000)       // 命令重试间隔(毫秒)
+                // 心跳检测
+                .setPingConnectionInterval(30000); // 心跳检测间隔(毫秒)
+
         return Redisson.create(config);
     }
-//    @Bean
-//    public RedissonClient redisson2() {
-//        Config config = new Config();
-//        config.useSingleServer().setAddress("redis://localhost:6380");
-//        return Redisson.create(config);
-//    }
 }

@@ -1,4 +1,5 @@
 --Lua脚本用于秒杀活动，根据用户id和优惠卷id判断用户是否可以秒杀，并扣减库存和下单，实现原子性操作。
+--XGROUP CREATE stream.orders g1 0 MKSTREAM 运行前需先创建消息队列和消费组
 --1.参数列表
 -- 优惠卷id
 local voucher_id=ARGV[1]
@@ -26,5 +27,5 @@ redis.call("incrby",stock_key,-1)
 --下单
 redis.call("sadd",order_key,user_id)
 --发送消息到消息队列中 XADD stream:order * user_id user_id order_id order_id voucher_id voucher_id
-redis.call("xadd","stream:order","*","userId",user_id,"vourcherId",voucher_id,"id",order_id)
+redis.call("xadd","stream.orders","*","userId",user_id,"voucherId",voucher_id,"id",order_id)
 return 0
