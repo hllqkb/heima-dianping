@@ -61,6 +61,21 @@ public class UserController {
         //  实现登出功能
         return userService.logout();
     }
+    /**
+     * 签到功能
+     */
+
+    @PostMapping("/sign")
+    public Result sign(){
+        return userService.sign();
+    }
+    /**
+     * 连续签到次数统计
+     */
+    @PostMapping("/sign/count")
+    public Result signCount(){
+        return userService.signCount();
+    }
 
     @GetMapping("/me")
     public Result me(){
